@@ -32,8 +32,7 @@ export default function CandidateRegister() {
             setTimeout(() => navigate('/login'), 1500);
         } catch (err) {
             setMessage(
-                `⚠️ Account created (ID ${candidateId}), but photo capture failed: ${
-                    err.response?.data?.detail || 'Check that the camera is available.'
+                `⚠️ Account created (ID ${candidateId}), but photo capture failed: ${err.response?.data?.detail || 'Check that the camera is available.'
                 }`
             );
         }
