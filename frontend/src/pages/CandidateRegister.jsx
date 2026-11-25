@@ -15,10 +15,12 @@ export default function CandidateRegister() {
         e.preventDefault();
 
         let candidateId;
+        let accessToken;
 
         try {
             const res = await API.post('/candidates/register', form);
             candidateId = res.data.candidate_id;
+            accessToken = res.data.access_token;
         } catch (err) {
             setMessage(`❌ ${err.response?.data?.detail || 'Registration failed'}`);
             return;
@@ -27,7 +29,11 @@ export default function CandidateRegister() {
         setMessage(`Candidate created (ID ${candidateId}). Check the camera window...`);
 
         try {
-            await API.post(`/candidates/${candidateId}/capture-photo`);
+            await API.post(
+                `/candidates/${candidateId}/capture-photo`,
+                null,
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
             setMessage('✅ Registration and photo capture complete. Redirecting...');
             setTimeout(() => navigate('/login'), 1500);
         } catch (err) {

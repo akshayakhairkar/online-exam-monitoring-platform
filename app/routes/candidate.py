@@ -1,11 +1,13 @@
 
+from typing import cast
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.models.candidate import Candidate
 from app.schemas.candidate import CandidateCreate
-from app.core.security import hash_password
+from app.core.security import create_access_token, get_current_candidate_id, hash_password
 from app.services.camera import capture_registration_photo
 
 router = APIRouter(
@@ -50,15 +52,24 @@ def register_candidate(
         "message": "Candidate registered successfully",
         "candidate_id": new_candidate.id,
         "name": new_candidate.name,
-        "email": new_candidate.email
+        "email": new_candidate.email,
+        "access_token": create_access_token(cast(int, new_candidate.id), role="candidate"),
+        "token_type": "bearer",
     }
 
 
 @router.post("/{candidate_id}/capture-photo")
 def capture_candidate_photo(
     candidate_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_candidate_id: int = Depends(get_current_candidate_id),
 ):
+    if candidate_id != current_candidate_id:
+        raise HTTPException(
+            status_code=404,
+            detail="Candidate not found"
+        )
+
     # 1. Verify candidate exists in SQLite
     candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not candidate:

@@ -1,15 +1,93 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import API from '../api/axios';
+import { useNavigate } from 'react-router-dom';
+import FacePresenceMonitor from './components/FacePresenceMonitor';
+import formatDateTime from '../utils/formatDateTime';
 
 export default function ExamDashboard() {
-    const [candidateId, setCandidateId] = useState('');
     const [sessionId, setSessionId] = useState(null);
     const [status, setStatus] = useState('');
     const [message, setMessage] = useState('');
+    const [monitoringMessage, setMonitoringMessage] = useState('');
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!localStorage.getItem('token') || localStorage.getItem('role') !== 'candidate') {
+            navigate('/login', { replace: true });
+        }
+    }, [navigate]);
+
+    useEffect(() => {
+        if (!sessionId || status !== 'IN_PROGRESS') return;
+
+        let focusLossReported = false;
+        let blurTimeoutId = null;
+
+        const reportFocusLoss = async (eventType) => {
+            if (focusLossReported) return;
+            focusLossReported = true;
+
+            try {
+                await API.post(`/sessions/${sessionId}/events`, {
+                    event_type: eventType,
+                });
+                setMonitoringMessage('');
+            } catch (error) {
+                const detail =
+                    error.response?.data?.detail ||
+                    error.message ||
+                    'Request failed';
+                setMonitoringMessage(`Could not save monitoring event: ${detail}`);
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                if (blurTimeoutId !== null) {
+                    window.clearTimeout(blurTimeoutId);
+                    blurTimeoutId = null;
+                }
+                void reportFocusLoss('TAB_HIDDEN');
+            } else {
+                focusLossReported = false;
+            }
+        };
+
+        const handleWindowBlur = () => {
+            if (blurTimeoutId !== null) {
+                window.clearTimeout(blurTimeoutId);
+            }
+            blurTimeoutId = window.setTimeout(() => {
+                blurTimeoutId = null;
+                void reportFocusLoss(
+                    document.visibilityState === 'hidden'
+                        ? 'TAB_HIDDEN'
+                        : 'WINDOW_BLUR'
+                );
+            }, 200);
+        };
+
+        const handleWindowFocus = () => {
+            focusLossReported = false;
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('blur', handleWindowBlur);
+        window.addEventListener('focus', handleWindowFocus);
+
+        return () => {
+            if (blurTimeoutId !== null) {
+                window.clearTimeout(blurTimeoutId);
+            }
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('blur', handleWindowBlur);
+            window.removeEventListener('focus', handleWindowFocus);
+        };
+    }, [sessionId, status]);
 
     const startExam = async () => {
         try {
-            const res = await API.post('/sessions/start', { candidate_id: parseInt(candidateId) });
+            const res = await API.post('/sessions/start');
             setSessionId(res.data.id);
             setStatus(res.data.status);
             setMessage(`✅ Exam started! Session ID: ${res.data.id}`);
@@ -33,7 +111,7 @@ export default function ExamDashboard() {
     const submitExam = async () => {
         const res = await API.post(`/sessions/${sessionId}/submit`);
         setStatus(res.data.status);
-        setMessage(`✅ Exam submitted at ${new Date(res.data.end_time).toLocaleTimeString()}`);
+        setMessage(`✅ Exam submitted at ${formatDateTime(res.data.end_time)}`);
     };
 
     const handleLogout = () => {
@@ -50,12 +128,6 @@ export default function ExamDashboard() {
 
             {!sessionId ? (
                 <div>
-                    <input
-                        placeholder="Enter your Candidate ID"
-                        value={candidateId}
-                        onChange={(e) => setCandidateId(e.target.value)}
-                        style={styles.input}
-                    />
                     <button onClick={startExam} style={styles.startBtn}>▶ Start Exam</button>
                 </div>
             ) : (
@@ -64,6 +136,7 @@ export default function ExamDashboard() {
                         <p><strong>Session ID:</strong> {sessionId}</p>
                         <p><strong>Status:</strong> <span style={{ color: statusColor(status) }}>{status}</span></p>
                     </div>
+                    {status === 'IN_PROGRESS' && <FacePresenceMonitor sessionId={sessionId} />}
                     <div style={styles.buttonRow}>
                         <button onClick={pauseExam} disabled={status !== 'IN_PROGRESS'} style={styles.pauseBtn}>⏸ Pause</button>
                         <button onClick={resumeExam} disabled={status !== 'PAUSED'} style={styles.resumeBtn}>▶ Resume</button>
@@ -72,6 +145,7 @@ export default function ExamDashboard() {
                 </div>
             )}
             {message && <p style={styles.message}>{message}</p>}
+            {monitoringMessage && <p role="alert" style={styles.message}>{monitoringMessage}</p>}
         </div>
     );
 }
@@ -81,7 +155,6 @@ const statusColor = (s) => ({ IN_PROGRESS: 'green', PAUSED: 'orange', SUBMITTED:
 const styles = {
     container: { maxWidth: '500px', margin: '60px auto', padding: '30px', border: '1px solid #ccc', borderRadius: '10px' },
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-    input: { width: '100%', padding: '10px', fontSize: '16px', marginBottom: '15px', borderRadius: '6px', border: '1px solid #ddd' },
     startBtn: { width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '16px' },
     statusBox: { background: '#f9fafb', padding: '15px', borderRadius: '8px', marginBottom: '20px' },
     buttonRow: { display: 'flex', gap: '10px' },

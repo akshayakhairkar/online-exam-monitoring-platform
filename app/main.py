@@ -12,11 +12,13 @@ from app.routes.exam_session import router as session_router
 from app.models.admin import Admin
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.models.monitoring_event import MonitoringEvent
+from app.routes.monitoring_event import router as monitoring_event_router
 # ---------------------------------------------------------------------------
 # FastAPI Application Setup
 # ---------------------------------------------------------------------------
 app = FastAPI(
-    title="ExamGuard API",
+    title="Online Exam Monitoring & Integrity Analytics Platform",
     description="Online Exam Monitoring & Integrity Analytics Platform",
     version="1.0.0"
 )
@@ -43,7 +45,7 @@ app.include_router(candidate_router)
 # Mount authentication & login routes (prefix: /auth)
 app.include_router(auth_router)
 app.include_router(session_router)
-
+app.include_router(monitoring_event_router)
 # ---------------------------------------------------------------------------
 # Root & Health Endpoints
 # ---------------------------------------------------------------------------
